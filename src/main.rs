@@ -1,16 +1,14 @@
-use sqlx::Connection;
+use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
-use sqlx::SqliteConnection;
 // provides `try_next`
 use futures::TryStreamExt;
 
 #[async_std::main]
 async fn main() -> Result<(), sqlx::Error> {
-    let mut conn = SqliteConnection::connect("cmi-pb.db").await?;
-    sqlx::query("PRAGMA foreign_keys = ON").execute(&mut conn).await?;
-    let mut rows = sqlx::query("SELECT * FROM foobar WHERE child = ?")
-        .bind("a")
-        .fetch(&mut conn);
+    let pool = SqlitePoolOptions::new().max_connections(5).connect("cmi-pb.db").await?;
+    sqlx::query("PRAGMA foreign_keys = ON").execute(&pool).await?;
+
+    let mut rows = sqlx::query("SELECT * FROM foobar WHERE child LIKE ?").bind("%").fetch(&pool);
 
     while let Some(row) = rows.try_next().await? {
         // map the row into a user-defined domain type
@@ -18,6 +16,16 @@ async fn main() -> Result<(), sqlx::Error> {
         println!("{:?}", parent);
     }
 
+    println!("---------------------");
+
+    let rows_all =
+        sqlx::query("SELECT * FROM foobar WHERE child LIKE ?").bind("%").fetch_all(&pool).await?;
+
+    let second_row = &rows_all[1];
+    let parent: &str = second_row.try_get("parent")?;
+    println!("{:?}", parent);
+
+    println!("---------------------");
 
     Ok(())
 }
