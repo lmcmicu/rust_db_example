@@ -1,11 +1,17 @@
-use sqlx::sqlite::SqlitePoolOptions;
-use sqlx::Row;
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+    Row,
+};
+use std::str::FromStr;
 // provides `try_next`
 use futures::TryStreamExt;
 
 #[async_std::main]
 async fn main() -> Result<(), sqlx::Error> {
-    let pool = SqlitePoolOptions::new().max_connections(5).connect("sqlite://cmi-pb.db").await?;
+    let connection_options =
+        SqliteConnectOptions::from_str("sqlite://data.db")?.create_if_missing(true);
+
+    let pool = SqlitePoolOptions::new().max_connections(5).connect_with(connection_options).await?;
 
     sqlx::query("PRAGMA foreign_keys = ON").execute(&pool).await?;
 
@@ -89,6 +95,12 @@ async fn main() -> Result<(), sqlx::Error> {
     println!("FETCH ONE {:?}", parent);
 
     println!("---------------------");
+
+    sqlx::query("UPDATE `bar` SET `parent` = ? WHERE `parent` = ?")
+        .bind("z")
+        .bind("x")
+        .execute(&pool)
+        .await?;
 
     Ok(())
 }
