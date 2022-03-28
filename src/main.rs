@@ -1,3 +1,4 @@
+use serde_json::json;
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -135,6 +136,7 @@ async fn postgres_demo() -> Result<(), sqlx::Error> {
             r#"CREATE TABLE "bar" (
                              "parent" TEXT,
                              "child" TEXT,
+                             "cousin" JSON,
                              FOREIGN KEY ("child") REFERENCES "foo"("child")
                            )"#
         )
@@ -149,21 +151,28 @@ async fn postgres_demo() -> Result<(), sqlx::Error> {
         .execute(&pool)
         .await?;
 
-    sqlx::query(r#"INSERT INTO "bar" ("parent", "child") VALUES ($1, $2), ($3, $4)"#)
-        .bind("x")
-        .bind("a")
-        .bind("y")
-        .bind("b")
-        .execute(&pool)
-        .await?;
+    sqlx::query(
+        r#"INSERT INTO "bar" ("parent", "child", "cousin") VALUES ($1, $2, $3), ($4, $5, $6)"#,
+    )
+    .bind("x")
+    .bind("a")
+    .bind(json!({"value": "shugginses", "valid": true, "messages": {}}))
+    .bind("y")
+    .bind("b")
+    .bind(json!({"value": "pugginses", "valid": true, "messages": {}}))
+    .execute(&pool)
+    .await?;
 
     let mut rows =
         sqlx::query(r#"SELECT * FROM "bar" WHERE "child" LIKE $1"#).bind("%").fetch(&pool);
 
     while let Some(row) = rows.try_next().await? {
         // map the row into a user-defined domain type
-        let parent: &str = row.try_get("parent")?;
-        println!("Postgresql result (fetch): {:?}", parent);
+        let cousin: serde_json::Value = row.try_get("cousin")?;
+        match cousin {
+            serde_json::Value::Object(m) => println!("Postgresql result (fetch): {:?}", m),
+            _ => panic!("Programming error!"),
+        };
     }
 
     println!("---------------------");
