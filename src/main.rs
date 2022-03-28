@@ -136,7 +136,7 @@ async fn postgres_demo() -> Result<(), sqlx::Error> {
             r#"CREATE TABLE "bar" (
                              "parent" TEXT,
                              "child" TEXT,
-                             "cousin" JSON,
+                             "cousin" JSONB,
                              FOREIGN KEY ("child") REFERENCES "foo"("child")
                            )"#
         )
@@ -156,10 +156,10 @@ async fn postgres_demo() -> Result<(), sqlx::Error> {
     )
     .bind("x")
     .bind("a")
-    .bind(json!({"value": "shugginses", "valid": true, "messages": {}}))
+    .bind(json!({"value": "shugginses", "valid": true, "messages": ["Your data is bad"]}))
     .bind("y")
     .bind("b")
-    .bind(json!({"value": "pugginses", "valid": true, "messages": {}}))
+    .bind(json!({"value": "pugginses", "valid": true, "messages": ["Your data is awful"]}))
     .execute(&pool)
     .await?;
 
@@ -171,6 +171,24 @@ async fn postgres_demo() -> Result<(), sqlx::Error> {
         let cousin: serde_json::Value = row.try_get("cousin")?;
         match cousin {
             serde_json::Value::Object(m) => println!("Postgresql result (fetch): {:?}", m),
+            _ => panic!("Programming error!"),
+        };
+    }
+
+    println!("---------------------");
+
+    let mut rows = sqlx::query(
+        r#"SELECT parent, child, cousin -> 'messages' as messages FROM "bar"
+                       WHERE "child" LIKE $1"#,
+    )
+    .bind("%")
+    .fetch(&pool);
+
+    while let Some(row) = rows.try_next().await? {
+        // map the row into a user-defined domain type
+        let messages: serde_json::Value = row.try_get("messages")?;
+        match messages {
+            serde_json::Value::Array(a) => println!("Postgresql result (fetch): {:?}", a),
             _ => panic!("Programming error!"),
         };
     }
